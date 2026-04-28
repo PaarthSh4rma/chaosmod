@@ -1,17 +1,33 @@
 # ChaosMod
 
-A chaos-powered Discord bot for roasts, vibe checks, leaderboards, and server analytics.
+A chaos-powered Discord bot that roasts users, tracks humiliation stats, and keeps dead chats alive.
 
-Mean on the outside. Engineered properly underneath.
+## Features
 
-## Tech
+- `/roast` with adjustable levels (mild → nuclear)
+- Persistent roast tracking (SQLite)
+- `/roastboard` leaderboard
+- `/roaststats` personal stats
+- Slash command interface
 
-- Python
-- discord.py
-- Slash commands
-- PostgreSQL later
-- React dashboard later
+## Tech Stack
 
-## Status
+- Python (discord.py)
+- Async architecture
+- SQLite (aiosqlite)
+- Environment-based config
 
-Building MVP.
+## Setup
+
+```bash
+git clone ...
+pip install -r requirements.txt
+```
+create .env
+```text
+DISCORD_TOKEN=your_token
+```
+run
+```bash
+python bot.py
+```
