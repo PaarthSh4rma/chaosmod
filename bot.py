@@ -33,7 +33,32 @@ async def init_db():
                 PRIMARY KEY (guild_id, user_id)
             )
         """)
+        await db.execute("""
+    CREATE TABLE IF NOT EXISTS guild_settings (
+        guild_id INTEGER PRIMARY KEY,
+        mode TEXT NOT NULL DEFAULT 'toxic'
+    )
+""")
         await db.commit()
+
+async def set_mode(guild_id: int, mode: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT INTO guild_settings (guild_id, mode)
+            VALUES (?, ?)
+            ON CONFLICT(guild_id)
+            DO UPDATE SET mode = excluded.mode
+        """, (guild_id, mode))
+        await db.commit()
+
+
+async def get_mode(guild_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            SELECT mode FROM guild_settings WHERE guild_id = ?
+        """, (guild_id,))
+        row = await cursor.fetchone()
+        return row[0] if row else "toxic"
 
 async def increment_roast(guild_id: int, user_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
@@ -114,24 +139,81 @@ async def roast(
         return
 
     roasts = {
-        "mild": [
-            f"{user.mention} has the energy of a loading screen.",
-            f"{user.mention} is built like an unsaved draft.",
-            f"{user.mention} types like their keyboard is filing a complaint.",
-        ],
-        "medium": [
-            f"{user.mention} has main character syndrome with tutorial NPC stats.",
-            f"{user.mention} brings nothing to the table except the awkward silence after.",
-            f"{user.mention} has the confidence of someone who has never checked the docs.",
-        ],
-        "nuclear": [
-            f"{user.mention} is what happens when Ctrl+Z stops working.",
-            f"{user.mention} has the aura of deprecated code nobody wants to maintain.",
-            f"{user.mention} is proof that not every side quest deserves lore.",
-        ],
+        "wholesome": {
+            "mild": [
+                f"{user.mention} you’re doing your best, and that’s… noticeable.",
+                f"{user.mention} you have a very unique presence. Memorable, even.",
+                f"{user.mention} you’re like a bug in production — unexpected but impactful.",
+            ],
+            "medium": [
+                f"{user.mention} you bring a special kind of chaos that keeps things interesting.",
+                f"{user.mention} you’re proof that confidence doesn’t need a reason.",
+                f"{user.mention} you remind everyone that perfection is overrated.",
+            ],
+            "nuclear": [
+                f"{user.mention} you’re a learning experience for everyone around you.",
+                f"{user.mention} you make people appreciate silence more.",
+                f"{user.mention} you’re not a mistake — you’re a feature we don’t fully understand yet.",
+            ]
+        },
+        "toxic": {
+            "mild": [
+                f"{user.mention} has the energy of a buffering video.",
+                f"{user.mention} is built like a draft that never got saved.",
+                f"{user.mention} types like autocorrect gave up halfway through.",
+            ],
+            "medium": [
+                f"{user.mention} has main character syndrome with side quest relevance.",
+                f"{user.mention} contributes just enough to be noticed, but not enough to be useful.",
+                f"{user.mention} is the human equivalent of a typo you can’t unsee.",
+            ],
+            "nuclear": [
+                f"{user.mention} has the aura of deprecated code nobody wants to touch.",
+                f"{user.mention} is what happens when you skip every tutorial and still fail.",
+                f"{user.mention} could be replaced by a placeholder and no one would notice.",
+            ]
+        },
+        "nuclear": {
+            "mild": [
+                f"{user.mention} somehow loses arguments they weren’t even part of.",
+                f"{user.mention} has the presence of a background tab.",
+                f"{user.mention} is running on vibes and they’re corrupted.",
+            ],
+            "medium": [
+                f"{user.mention} has the confidence of someone who has never been right.",
+                f"{user.mention} is the reason group projects have trust issues.",
+                f"{user.mention} couldn’t debug a print statement.",
+            ],
+            "nuclear": [
+                f"{user.mention} is a failed merge conflict in human form.",
+                f"{user.mention} has negative impact. Like actively lowers team performance.",
+                f"{user.mention} is the reason instructions come with warnings.",
+                f"{user.mention} would lose a race against their own potential.",
+                f"{user.mention} is living proof that not every branch should be merged.",
+            ]
+        },
+        "unhinged": {
+            "mild": [
+                f"{user.mention} feels like a side quest that unlocks nothing.",
+                f"{user.mention} has the vibe of a broken elevator button.",
+                f"{user.mention} is spiritually a loading screen tip.",
+            ],
+            "medium": [
+                f"{user.mention} was definitely assembled without the manual.",
+                f"{user.mention} feels like a DLC nobody installed.",
+                f"{user.mention} is the human version of a captcha that fails itself.",
+            ],
+            "nuclear": [
+                f"{user.mention} is an undocumented feature in reality.",
+                f"{user.mention} feels like a patch note nobody understands.",
+                f"{user.mention} exists in a constant state of '???.exe has stopped working'.",
+                f"{user.mention} is what happens when the universe forgets to rollback.",
+                f"{user.mention} is an edge case that became a lifestyle.",
+            ]
+        }
     }
-
-    chosen_roast = random.choice(roasts[level.value])
+    mode = await get_mode(interaction.guild_id)
+    chosen_roast = random.choice(roasts[mode][level.value])
     await increment_roast(interaction.guild_id, user.id)
 
     await interaction.response.send_message(chosen_roast)
@@ -195,7 +277,7 @@ async def on_message(message: discord.Message):
     if message.guild:
         last_message_time[message.guild.id] = message.created_at
 
-@tasks.loop(minutes=5)
+@tasks.loop(minutes = 5)
 async def dead_chat_detector():
     now = datetime.now(timezone.utc)
 
@@ -226,15 +308,43 @@ async def dead_chat_detector():
         if channel is None:
             continue
 
-        messages = [
-            "This chat died harder than everyone’s New Year’s resolutions.",
-            "Dead chat detected. Incredible work, everyone. Truly lifeless.",
-            "I’ve seen abandoned side projects with more activity than this server.",
-            "The vibe here is so dead I almost filed a missing persons report.",
-            "Chat’s quieter than someone explaining their GitHub contribution graph.",
-        ]
+        mode = await get_mode(guild.id)
 
-        await channel.send(random.choice(messages))
+        messages = {
+            "wholesome": [
+                "Hey… it’s been quiet. Hope everyone’s doing okay 🫶",
+                "This chat is resting. That’s valid.",
+                "Silence can be peaceful… but also kinda suspicious.",
+            ],
+            "toxic": [
+                "This chat died harder than everyone’s motivation.",
+                "Dead chat detected. Incredible work, everyone.",
+                "I’ve seen abandoned repos with more activity than this.",
+            ],
+            "nuclear": [
+                "This chat isn’t dead. It was never alive.",
+                "Even ghosts left this place.",
+                "This server has the energy of an unsubmitted assignment.",
+            ],
+            "unhinged": [
+                "hello?? did reality crash??",
+                "this chat feels like a loading screen that forgot to load",
+                "i blinked and everyone disappeared. unsettling.",
+            ]
+        }
+
+        await channel.send(random.choice(messages[mode]))
         dead_chat_sent[guild.id] = True
+
+@tree.command(name="chaosmode", description="Set the bot's personality")
+@app_commands.choices(mode=[
+    app_commands.Choice(name="wholesome", value="wholesome"),
+    app_commands.Choice(name="toxic", value="toxic"),
+    app_commands.Choice(name="nuclear", value="nuclear"),
+    app_commands.Choice(name="unhinged", value="unhinged"),
+])
+async def chaosmode(interaction: discord.Interaction, mode: app_commands.Choice[str]):
+    await set_mode(interaction.guild_id, mode.value)
+    await interaction.response.send_message(f"Chaos mode set to **{mode.value}** 😈")
 
 client.run(TOKEN)
