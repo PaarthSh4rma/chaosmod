@@ -3,16 +3,24 @@ import discord
 from discord import app_commands
 from dotenv import load_dotenv
 import aiosqlite
+from discord.ext import tasks
+from datetime import datetime, timezone, timedelta
+import random
 roast_counts = {}
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
 DB_PATH = "chaosmod.db"
+last_message_time = {}
+dead_chat_sent = {}
+DEAD_CHAT_MINUTES = 30
 
 
 async def init_db():
@@ -52,6 +60,8 @@ async def get_roastboard(guild_id: int):
 @client.event
 async def on_ready():
     try:
+        if not dead_chat_detector.is_running():
+            dead_chat_detector.start()
         await init_db()
         synced = await tree.sync()
         print(f"Synced {len(synced)} commands")
@@ -176,5 +186,55 @@ async def roaststats(interaction: discord.Interaction, user: discord.Member = No
     await interaction.response.send_message(
         f"📊 {user.mention} has been roasted **{count}** times.\n{verdict}"
     )
+
+@client.event
+async def on_message(message: discord.Message):
+    if message.author.bot:
+        return
+
+    if message.guild:
+        last_message_time[message.guild.id] = message.created_at
+
+@tasks.loop(minutes=5)
+async def dead_chat_detector():
+    now = datetime.now(timezone.utc)
+
+    for guild in client.guilds:
+        last_seen = last_message_time.get(guild.id)
+
+        if last_seen is None:
+            continue
+
+        is_dead = now - last_seen > timedelta(minutes=DEAD_CHAT_MINUTES)
+
+        if not is_dead:
+            dead_chat_sent[guild.id] = False
+            continue
+
+        if dead_chat_sent.get(guild.id):
+            continue
+
+        channel = guild.system_channel
+
+        if channel is None:
+            text_channels = [
+                c for c in guild.text_channels
+                if c.permissions_for(guild.me).send_messages
+            ]
+            channel = text_channels[0] if text_channels else None
+
+        if channel is None:
+            continue
+
+        messages = [
+            "This chat died harder than everyone’s New Year’s resolutions.",
+            "Dead chat detected. Incredible work, everyone. Truly lifeless.",
+            "I’ve seen abandoned side projects with more activity than this server.",
+            "The vibe here is so dead I almost filed a missing persons report.",
+            "Chat’s quieter than someone explaining their GitHub contribution graph.",
+        ]
+
+        await channel.send(random.choice(messages))
+        dead_chat_sent[guild.id] = True
 
 client.run(TOKEN)
